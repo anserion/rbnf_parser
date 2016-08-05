@@ -1,51 +1,46 @@
-{Распознающая программа для метаязыка форм Бэкуса-Наура}
-program rbnf_parser(input, oufput);
+//Copyright 2016 Andrey S. Ionisyan (anserion@gmail.com)
+//
+//Licensed under the Apache License, Version 2.0 (the "License");
+//you may not use this file except in compliance with the License.
+//You may obtain a copy of the License at
+//
+//    http://www.apache.org/licenses/LICENSE-2.0
+//
+//Unless required by applicable law or agreed to in writing, software
+//distributed under the License is distributed on an "AS IS" BASIS,
+//WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+//See the License for the specific language governing permissions and
+//limitations under the License.
 
-const txmax = 100; {длина таблицы имен}
+// last version: https://github.com/anserion/lex_scanner.git
+
+{Поиск многосимвольных идентификаторов, чисел,             }
+{односимвольных и двухсимвольных операций во входном потоке}
+program lex_scanner(input, oufput);
 
 type
-t_object = (nul,num,ident,oper);
-
 t_sym=record 
-    kind:t_object; {тип идентификатора}
+    kind: (nul,oper,num,ident); {тип идентификатора}
     tag:integer;   {вспомогательный элемент число-метка (зарезервировано)}
     i_name:integer;  {числовое имя-код идентификатора для быстрой обработки}
     s_name:string;   {строковое имя идентификатора}
 end;
-     
+
+const digits=['0'..'9'];
+      eng_letters=['A'..'Z','a'..'z'];
+      spec_letters=[',',';','!','%','?','#','$','@','&','^',
+                    '/','\','|','=','<','>','(',')','{','}',
+                    '[',']','+','-','*','.','''','"','`',':','~'];
+//локализация не работает на 2 байта/символ UTF8
+//      rus_letters=['А','Б','В','Г','Д','Е','Ё','Ж','З','И','Й'];,
+//                   'К','Л','М','Н','О','П','Р','С','Т','У','Ф',
+//                   'Х','Ц','Ч','Ш','Щ','Ы','Ь','Ъ','Э','Ю','Я',
+//                   'а','б','в','г','д','е','ё','ж','з','и','й',
+//                   'к','л','м','н','о','п','р','с','т','у','ф',
+//                   'х','ц','ч','ш','щ','ы','ь','ъ','э','ю','я'];
+
 var ch,ch2: char; {последний прочитанный входной символ и следующий за ним}
     start_of_file, end_of_file:boolean;
-    id_table: array [0..txmax] of t_sym; {сводная таблица идентификаторов}
-    tx: integer; {число идентификаторов в таблице}
-
-{запись нового объекта (идентификатора), в таблицу}
-procedure add_id_to_table(new_id:t_sym);
-begin
-    if tx<txmax then
-    begin
-        tx:=tx+1;
-        id_table[tx]:=new_id;
-    end;
-end {enter};
-
-{поиск имени id в таблице объектов-идентификаторов}
-function find_by_sname(id:string): integer;
-var i,res: integer;
-begin
-  res:=0;
-  for i:=1 to tx do
-    if id_table[i].s_name=id then res:=i;
-  find_by_sname:=res;
-end {find_by_sname};
-
-function find_by_iname(id:integer): integer;
-var i,res: integer;
-begin
-  res:=0;
-  for i:=1 to tx do
-    if id_table[i].i_name=id then res:=i;
-  find_by_iname:=res;
-end {find_by_iname};
 
 {прочитать из потока ввода два символа и поместить их в ch, ch2}
 procedure getch;
@@ -64,116 +59,97 @@ begin
      if not(eof(input)) then read(ch2) else ch2:=' ';
   end;
 end {getch};
-  
+
 {найти во входном потоке терминальный символ}
 function getsym:t_sym;
 var id: t_sym;
 begin {getsym}
   {пропускаем возможные пробелы и концы строк}
   while (ch=' ')or(ch=chr(10))or(ch=chr(13)) do getch;
-  
+
   id.s_name:='';
   id.kind:=nul;
-  
-  {если ch - буква, или знак подчеркивния, то это - начало имени}
-  if ch in ['A'..'Z','a'..'z','_'] then
+
+  {если ch - буква или знак подчеркивния, то это - начало имени}
+  //локализация не работает на 2-х байтовых символах UTF8
+  if ch in ['_']+eng_letters{+rus_letters} then
   begin
     id.kind:=ident;
     {читаем посимвольно имя id[], состоящее из букв A-Z, цифр, подчеркивания}
     repeat
       id.s_name:=id.s_name+ch;
       getch;
-    until not(ch in ['A'..'Z','a'..'z','0'..'9','_']);
+    until not(ch in ['_']+eng_letters+digits{+rus_letters});
   end
     else
-  if ch in ['0'..'9'] then {если ch - цифра, то это - начало числа}
+  if ch in digits then {если ch - цифра, то это - начало числа}
   begin
     id.kind:=num;
     repeat
       id.s_name:=id.s_name+ch;
       getch;
-    until not(ch in ['0'..'9']);
-    if (ch='.')and(ch2 in ['0'..'9']) then
+    until not(ch in digits);
+    if (ch='.')and(ch2 in digits) then
     begin
       id.s_name:=id.s_name+ch;
       getch;
       repeat
         id.s_name:=id.s_name+ch;
         getch;
-      until not(ch in ['0'..'9']);      
+      until not(ch in digits);
     end;
   end
     else
+  if ch in spec_letters then
   begin {односимвольный и некоторые двусимвольные идентификаторы}
     id.kind:=oper;
-    if ch=',' then id.s_name:='comma';
-    if ch=';' then id.s_name:='semicolon';
-    if ch='!' then id.s_name:='exclamation';
-    if ch='%' then id.s_name:='percent';
-    if ch='?' then id.s_name:='question';
-    if ch='#' then id.s_name:='grid';
-    if ch='$' then id.s_name:='dollar';
-    if ch='@' then id.s_name:='at_symbol';
-    if ch='&' then id.s_name:='and_symbol';
-    if ch='^' then id.s_name:='xor_symbol';
-    if ch='/' then id.s_name:='slash';
-    if ch='\' then id.s_name:='reverse_slash';
-    if ch='|' then id.s_name:='or_symbol';
-    if ch='=' then id.s_name:='equal';
-    if ch='<' then id.s_name:='less';
-    if ch='>' then id.s_name:='greater';
-    if ch='(' then id.s_name:='left_paren';
-    if ch=')' then id.s_name:='right_paren';
-    if ch='{' then id.s_name:='figure_left_paren';
-    if ch='}' then id.s_name:='figure_right_paren';
-    if ch='[' then id.s_name:='square_left_paren';
-    if ch=']' then id.s_name:='square_right_paren';
-    if ch='+' then id.s_name:='plus';
-    if ch='-' then id.s_name:='minus';
-    if ch='*' then id.s_name:='times';
-    if ch='.' then id.s_name:='period';
-    if ch='''' then id.s_name:='quote';
-    if ch='"' then id.s_name:='double_quote';
-    if ch='`' then id.s_name:='alt_quote';
-    if ch=':' then id.s_name:='colon';
-    if ch='~' then id.s_name:='tilda';
-    
+    {односимвольные спецсимволы}
+    id.s_name:=ch;
     {разбор случаев двусимвольных спецкомбинаций}
-    if (ch='-')and(ch2='>') then begin id.s_name:='arrow_to'; getch; end;
-    if (ch='<')and(ch2='-') then begin id.s_name:='arrow_from'; getch; end;
-    if (ch='<')and(ch2='>') then begin id.s_name:='not_equal'; getch; end;
-    if (ch='!')and(ch2='=') then begin id.s_name:='not_equal'; getch; end;
-    if (ch='=')and(ch2='=') then begin id.s_name:='double_equal'; getch; end;
-    if (ch=':')and(ch2='=') then begin id.s_name:='becomes'; getch; end;
-    if (ch='<')and(ch2='=') then begin id.s_name:='less_equal'; getch; end;
-    if (ch='>')and(ch2='=') then begin id.s_name:='greater_equal'; getch; end;
-    if (ch='(')and(ch2='*') then begin id.s_name:='left_paren_star'; getch; end;
-    if (ch='*')and(ch2=')') then begin id.s_name:='right_paren_star'; getch; end;
-    if (ch='+')and(ch2='+') then begin id.s_name:='double_plus'; getch; end;
-    if (ch='-')and(ch2='-') then begin id.s_name:='double_minus'; getch; end;
-    if (ch='*')and(ch2='*') then begin id.s_name:='double_times'; getch; end;
-    if (ch='.')and(ch2='.') then begin id.s_name:='double_period'; getch; end;
-    if (ch=':')and(ch2=':') then begin id.s_name:='double_colon'; getch; end;
-    if (ch='/')and(ch2='/') then begin id.s_name:='double_slash'; getch; end;
-    if (ch='|')and(ch2='|') then begin id.s_name:='double_or'; getch; end;
-    if (ch='&')and(ch2='&') then begin id.s_name:='double_and'; getch; end;
-    if (ch='^')and(ch2='^') then begin id.s_name:='double_xor'; getch; end;
+    if (ch='-')and(ch2='>') then begin id.s_name:='->'; getch; end;
+    if (ch='<')and(ch2='-') then begin id.s_name:='<-'; getch; end;
+    if (ch='<')and(ch2='>') then begin id.s_name:='<>'; getch; end;
+    if (ch='!')and(ch2='=') then begin id.s_name:='!='; getch; end;
+    if (ch='=')and(ch2='=') then begin id.s_name:='=='; getch; end;
+    if (ch=':')and(ch2='=') then begin id.s_name:=':='; getch; end;
+    if (ch='<')and(ch2='=') then begin id.s_name:='<='; getch; end;
+    if (ch='>')and(ch2='=') then begin id.s_name:='>='; getch; end;
+    if (ch='(')and(ch2='*') then begin id.s_name:='(*'; getch; end;
+    if (ch='*')and(ch2=')') then begin id.s_name:='*)'; getch; end;
+    if (ch='+')and(ch2='+') then begin id.s_name:='++'; getch; end;
+    if (ch='-')and(ch2='-') then begin id.s_name:='--'; getch; end;
+    if (ch='*')and(ch2='*') then begin id.s_name:='**'; getch; end;
+    if (ch='.')and(ch2='.') then begin id.s_name:='..'; getch; end;
+    if (ch=':')and(ch2=':') then begin id.s_name:='::'; getch; end;
+    if (ch='/')and(ch2='/') then begin id.s_name:='//'; getch; end;
+    if (ch='|')and(ch2='|') then begin id.s_name:='||'; getch; end;
+    if (ch='&')and(ch2='&') then begin id.s_name:='&&'; getch; end;
+    if (ch='^')and(ch2='^') then begin id.s_name:='^^'; getch; end;
+    {смайлики :) }
+    if (ch=':')and(ch2=')') then begin id.s_name:=':)'; getch; end;
+    if (ch=':')and(ch2='(') then begin id.s_name:=':('; getch; end;
+    if (ch=':')and(ch2=']') then begin id.s_name:=':]'; getch; end;
+    if (ch=':')and(ch2='[') then begin id.s_name:=':['; getch; end;
 
+    getch;
+  end
+    else
+  begin
+    id.s_name:=ch;
+    id.kind:=nul;
     getch;
   end;
   getsym:=id;
 end {getsym};
 
-var id:t_sym; i:integer;
+var id:t_sym;
 begin {основная программа}
-start_of_file:=true; end_of_file:=false; tx:=0; 
+start_of_file:=true; end_of_file:=false;
 
 getch;
 repeat
     id:=getsym;
-    add_id_to_table(id);
-until id.s_name='period';
+    writeln('kind=',id.kind,' name=',id.s_name);
+until id.s_name='.';
 
-for i:=1 to tx do
-  writeln(i,': symbol=',id_table[i].s_name,', kind=',id_table[i].kind);
 end.
