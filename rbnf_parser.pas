@@ -171,8 +171,9 @@ end {factor};
 // term ::= <factor> {<factor>}
 procedure term;
 begin
-   factor;
-   while (sym.kind=ident)or(sym.s_name='[') do factor;
+   repeat
+     factor;
+   until (sym.s_name='.')or(sym.s_name=',')or(sym.s_name=']');
 end {term};
 
 // expression ::= <term> {,<term>} 
