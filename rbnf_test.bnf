@@ -1,4 +1,4 @@
 A=x yy,[ [RRR] [yy] ] WW.
-BB12=AC DD [ [] Xx12] A 3.141592.
+BB12=AC DD [ [] Xx12],[ A 3.141592].
 C=(+A).
 end_of_file

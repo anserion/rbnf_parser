@@ -12,7 +12,7 @@
 //See the License for the specific language governing permissions and
 //limitations under the License.
 
-// last version: https://github.com/anserion/lex_scanner.git
+// last version: https://github.com/anserion/rbnf_parser.git
 
 {проверка синтаксиса метаязыка Бэкуса-Наура }
 program rbnf_parser(input, oufput);
