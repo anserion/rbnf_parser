@@ -14,9 +14,8 @@
 
 // last version: https://github.com/anserion/lex_scanner.git
 
-{Поиск многосимвольных идентификаторов, чисел,             }
-{односимвольных и двухсимвольных операций во входном потоке}
-program lex_scanner(input, oufput);
+{проверка синтаксиса метаязыка Бэкуса-Наура }
+program rbnf_parser(input, oufput);
 
 type
 t_sym=record 
@@ -30,7 +29,7 @@ const digits=['0'..'9'];
       eng_letters=['A'..'Z','a'..'z'];
       spec_letters=[',',';','!','%','?','#','$','@','&','^',
                     '/','\','|','=','<','>','(',')','{','}',
-                    '[',']','+','-','*','.','''','"','`',':','~'];
+		    '[',']','+','-','*','.','''','"','`',':','~'];
 //локализация не работает на 2 байта/символ UTF8
 //      rus_letters=['А','Б','В','Г','Д','Е','Ё','Ж','З','И','Й'];,
 //                   'К','Л','М','Н','О','П','Р','С','Т','У','Ф',
@@ -79,7 +78,9 @@ begin {getsym}
     repeat
       id.s_name:=id.s_name+ch;
       getch;
-    until not(ch in ['_']+eng_letters+digits{+rus_letters});
+    until not(ch in ['_']+eng_letters+digits{+rus_letters}) or end_of_file;
+    if (ch in ['_']+eng_letters+digits{+rus_letters}) and end_of_file then
+       id.s_name:=id.s_name+ch;
   end
     else
   if ch in digits then {если ch - цифра, то это - начало числа}
@@ -88,7 +89,8 @@ begin {getsym}
     repeat
       id.s_name:=id.s_name+ch;
       getch;
-    until not(ch in digits);
+    until not(ch in digits) or end_of_file;
+    if (ch in digits) and end_of_file then id.s_name:=id.s_name+ch;
     if (ch='.')and(ch2 in digits) then
     begin
       id.s_name:=id.s_name+ch;
@@ -96,7 +98,8 @@ begin {getsym}
       repeat
         id.s_name:=id.s_name+ch;
         getch;
-      until not(ch in digits);
+      until not(ch in digits) or end_of_file;
+      if (ch in digits) and end_of_file then id.s_name:=id.s_name+ch
     end;
   end
     else
@@ -131,25 +134,68 @@ begin {getsym}
     if (ch=':')and(ch2=']') then begin id.s_name:=':]'; getch; end;
     if (ch=':')and(ch2='[') then begin id.s_name:=':['; getch; end;
 
-    getch;
+    if not(end_of_file) then getch;
   end
     else
   begin
     id.s_name:=ch;
     id.kind:=nul;
-    getch;
+    if not(end_of_file) then getch;
   end;
   getsym:=id;
+  writeln('symbol: ',id.s_name);
 end {getsym};
+//==================================================================
 
-var id:t_sym;
-begin {основная программа}
-start_of_file:=true; end_of_file:=false;
+var sym:t_sym;
+procedure term; forward;
 
-getch;
-repeat
-    id:=getsym;
-    writeln('kind=',id.kind,' name=',id.s_name);
-until id.s_name='.';
+procedure error;
+begin
+   writeln;
+   writeln('INCORRECT INPUT: ',sym.s_name);
+   halt(-1);
+end; {error}
 
+// factor ::= <symbol> | [<term>]
+procedure factor;
+begin
+  if sym.s_name='[' then
+  begin
+    sym:=getsym;
+    if sym.s_name<>']' then term;
+    if sym.s_name=']' then sym:=getsym else error;
+  end else sym:=getsym;
+end {factor};
+
+// term ::= <factor> {<factor>}
+procedure term;
+begin
+   factor;
+   while (sym.kind=ident)or(sym.s_name='[') do factor;
+end {term};
+
+// expression ::= <term> {,<term>} 
+procedure expression;
+begin
+   term;
+   while sym.s_name=',' do
+   begin
+      sym:=getsym;
+      term;
+   end;
+end {expression};
+
+begin {main}
+  start_of_file:=true; end_of_file:=false;
+  getch; sym:=getsym;
+
+  while(sym.s_name<>'end_of_file') do
+  begin 
+      if sym.kind=ident then sym:=getsym else error;
+      if sym.s_name='=' then sym:=getsym else error;
+      expression;
+      if sym.s_name<>'.' then error;
+     sym:=getsym;
+  end;
 end.
