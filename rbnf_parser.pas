@@ -15,6 +15,7 @@
 // last version: https://github.com/anserion/rbnf_parser.git
 
 {проверка синтаксиса метаязыка Бэкуса-Наура }
+
 program rbnf_parser(input, oufput);
 
 type
