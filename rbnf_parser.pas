@@ -16,7 +16,7 @@
 
 {проверка синтаксиса метаязыка Бэкуса-Наура }
 
-program rbnf_parser(input, oufput);
+program rbnf_parser(input, output);
 
 type
 t_sym=record 
